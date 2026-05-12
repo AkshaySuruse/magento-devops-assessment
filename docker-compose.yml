@@ -1,0 +1,183 @@
+services:
+
+  nginx:
+    image: nginx:1.28-alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    expose:
+      - "8080"
+    volumes:
+      - ./configs/nginx:/etc/nginx/conf.d
+      - ./ssl:/etc/nginx/ssl
+      - ./magento:/var/www/html
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - php
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  varnish:
+    image: varnish:7.6
+    container_name: varnish
+    restart: unless-stopped
+    volumes:
+      - ./configs/varnish/default.vcl:/etc/varnish/default.vcl
+    command: >
+      varnishd -F
+      -f /etc/varnish/default.vcl
+      -s malloc,256m
+      -a 0.0.0.0:6081
+    ulimits:
+      memlock: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - nginx
+    healthcheck:
+      test: ["CMD", "varnishadm", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: php
+    restart: unless-stopped
+    user: "1001:1001"
+    working_dir: /var/www/html
+    volumes:
+      - ./magento:/var/www/html
+      - ./configs/php/php.ini:/usr/local/etc/php/conf.d/custom.ini
+      - ./configs/php/www.conf:/usr/local/etc/php-fpm.d/www.conf
+    networks:
+      - backend
+    depends_on:
+      - mysql
+      - redis
+      - opensearch
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "php", "-v"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mysql:
+    image: mysql:8.0.41
+    container_name: mysql
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./configs/mysql/my.cnf:/etc/mysql/conf.d/custom.cnf
+    networks:
+      - backend
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redis:
+    image: redis:8-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    container_name: opensearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms128m -Xmx128m"
+      plugins.security.disabled: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    container_name: phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+    networks:
+      - backend
+    depends_on:
+      - mysql
+
+  cron:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: cron
+    restart: unless-stopped
+    user: "1001:1001"
+    working_dir: /var/www/html
+    command: >
+      bash -c "while true;
+      do php bin/magento cron:run;
+      sleep 60;
+      done"
+    volumes:
+      - ./magento:/var/www/html
+    networks:
+      - backend
+    depends_on:
+      - php
+      - mysql
+      - redis
+    env_file:
+      - .env
+
+networks:
+  frontend:
+  backend:
+
+volumes:
+  mysql_data:
+  redis_data:
+  opensearch_data:

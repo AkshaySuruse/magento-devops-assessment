@@ -1,0 +1,12 @@
+.env
+magneto
+magento/vendor/
+magento/generated/
+magento/var/cache/
+magento/var/page_cache/
+magento/var/log/
+magento/pub/media/
+magento/pub/static/
+magento/pub/media/catalog/product/cache/
+magento/app/etc/env.php
+ssl/*.key
