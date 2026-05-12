@@ -92,11 +92,11 @@ Add the following line to your local hosts file:
 
 ## URLs
 
-| Resource    | URL                                |
-| ----------- | ---------------------------------- |
-| Storefront  | https://test.dyna.com              |
-| Admin Panel | https://test.dyna.com/myadminpanel |
-| phpMyAdmin  | https://test.dyna.com/pma/         |
+| Resource    | URL                                 |
+| ----------- | ----------------------------------  |
+| Storefront  | https://test.dyna.com               |
+| Admin Panel | https://test.dyna.com/admin_pn9srs7 |
+| phpMyAdmin  | https://test.dyna.com/pma/          |
 
 Because self-signed TLS is used, browsers may show a certificate warning that can safely be bypassed for testing purposes.
 
